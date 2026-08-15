@@ -103,7 +103,9 @@ struct BatteryPanelView: View {
         powerWatts: 24.9,
         healthPercent: 96,
         isCharging: true,
-        timeToFullMinutes: 110
+        isPluggedIn: true,
+        timeToFullMinutes: 110,
+        timeToEmptyMinutes: -1
     )
     @State private var refreshTimer: Timer?
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
@@ -117,17 +119,27 @@ struct BatteryPanelView: View {
         }
     }
 
+    private var statusLabel: String {
+        if state.isCharging { return "Charging" }
+        return state.isPluggedIn ? "Plugged In" : "On Battery"
+    }
+
+    private var statusColor: Color {
+        if state.isCharging { return .green }
+        return state.isPluggedIn ? .blue : .secondary
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text("MacBook Battery")
                     .font(.headline)
                 Spacer()
-                Text(state.isCharging ? "Charging" : "Idle")
+                Text(statusLabel)
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(state.isCharging ? Color.green.opacity(0.15) : Color.secondary.opacity(0.12))
+                    .background(statusColor.opacity(0.15))
                     .clipShape(Capsule())
             }
 
@@ -157,16 +169,29 @@ struct BatteryPanelView: View {
                 StatTile(label: "Health", value: state.healthPercent.map { "\($0)%" } ?? "—")
             }
 
-            Divider()
+            if state.isCharging {
+                Divider()
 
-            HStack {
-                Text("Time to full")
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(formatMinutes(state.timeToFullMinutes))
-                    .fontWeight(.semibold)
+                HStack {
+                    Text("Time to full")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(formatMinutes(state.timeToFullMinutes))
+                        .fontWeight(.semibold)
+                }
+                .font(.callout)
+            } else if !state.isPluggedIn {
+                Divider()
+
+                HStack {
+                    Text("Time remaining")
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text(state.timeToEmptyMinutes >= 0 ? formatMinutes(state.timeToEmptyMinutes) : "Calculating…")
+                        .fontWeight(.semibold)
+                }
+                .font(.callout)
             }
-            .font(.callout)
 
             Divider()
 

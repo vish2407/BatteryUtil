@@ -9,7 +9,9 @@ struct BatteryState {
     let powerWatts: Double
     let healthPercent: Int?
     let isCharging: Bool
+    let isPluggedIn: Bool
     let timeToFullMinutes: Int
+    let timeToEmptyMinutes: Int
 }
 
 final class BatteryReader {
@@ -33,25 +35,30 @@ final class BatteryReader {
             powerWatts: power,
             healthPercent: smart.healthPercent,
             isCharging: info.isCharging,
-            timeToFullMinutes: info.isCharging ? max(0, info.timeToFull) : 0
+            isPluggedIn: info.isPluggedIn,
+            timeToFullMinutes: info.isCharging ? max(0, info.timeToFull) : 0,
+            timeToEmptyMinutes: !info.isCharging && !info.isPluggedIn ? info.timeToEmpty : -1
         )
     }
 
-    private func readPowerSourceInfo() -> (currentCapacity: Int, maxCapacity: Int, isCharging: Bool, timeToFull: Int) {
+    private func readPowerSourceInfo() -> (currentCapacity: Int, maxCapacity: Int, isCharging: Bool, isPluggedIn: Bool, timeToFull: Int, timeToEmpty: Int) {
         guard let snapshot = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
               let sources = IOPSCopyPowerSourcesList(snapshot)?.takeRetainedValue() as? [CFTypeRef],
               let source = sources.first,
               let description = IOPSGetPowerSourceDescription(snapshot, source)?.takeUnretainedValue() as? [String: Any]
         else {
-            return (0, 100, false, 0)
+            return (0, 100, false, false, 0, -1)
         }
 
         let currentCapacity = description[kIOPSCurrentCapacityKey] as? Int ?? 0
         let maxCapacity = description[kIOPSMaxCapacityKey] as? Int ?? 100
         let isCharging = description[kIOPSIsChargingKey] as? Bool ?? false
+        let isPluggedIn = (description[kIOPSPowerSourceStateKey] as? String) == kIOPSACPowerValue
         let timeToFull = description[kIOPSTimeToFullChargeKey] as? Int ?? 0
+        // -1 means "still calculating" — pass it through as-is rather than clamping to 0.
+        let timeToEmpty = description[kIOPSTimeToEmptyKey] as? Int ?? -1
 
-        return (currentCapacity, maxCapacity, isCharging, timeToFull)
+        return (currentCapacity, maxCapacity, isCharging, isPluggedIn, timeToFull, timeToEmpty)
     }
 
     private func readSmartBatteryInfo() -> (voltage: Int, current: Int, healthPercent: Int?) {
