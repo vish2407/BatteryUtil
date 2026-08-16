@@ -110,7 +110,15 @@ struct BatteryPanelView: View {
     @State private var refreshTimer: Timer?
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
+    // Apple doesn't publish an exact wattage cutoff for "fast charge," but on
+    // Mac laptops sustained draw above ~40W only happens with a fast-charge-
+    // capable adapter, so that's the line we draw here.
+    private var isFastCharging: Bool {
+        state.isCharging && state.powerWatts > 40
+    }
+
     private var batteryTint: Color {
+        if isFastCharging { return .orange }
         if state.isCharging { return .green }
         switch state.percent {
         case ..<11: return .red
@@ -120,11 +128,13 @@ struct BatteryPanelView: View {
     }
 
     private var statusLabel: String {
+        if isFastCharging { return "Fast Charging" }
         if state.isCharging { return "Charging" }
         return state.isPluggedIn ? "Plugged In" : "On Battery"
     }
 
     private var statusColor: Color {
+        if isFastCharging { return .orange }
         if state.isCharging { return .green }
         return state.isPluggedIn ? .blue : .secondary
     }
@@ -135,12 +145,21 @@ struct BatteryPanelView: View {
                 Text("MacBook Battery")
                     .font(.headline)
                 Spacer()
-                Text(statusLabel)
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(statusColor.opacity(0.15))
-                    .clipShape(Capsule())
+                HStack(spacing: 4) {
+                    if state.isCharging {
+                        Image(systemName: "bolt.fill")
+                            .font(.caption2.weight(.bold))
+                            .symbolEffect(.pulse, options: .repeating, isActive: isFastCharging)
+                    }
+                    Text(statusLabel)
+                        .font(.caption.weight(.semibold))
+                }
+                .foregroundStyle(statusColor)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(statusColor.opacity(0.15))
+                .clipShape(Capsule())
+                .animation(.easeInOut(duration: 0.3), value: statusLabel)
             }
 
             VStack(alignment: .leading, spacing: 8) {
@@ -157,13 +176,15 @@ struct BatteryPanelView: View {
                         RoundedRectangle(cornerRadius: 4, style: .continuous)
                             .fill(batteryTint)
                             .frame(width: max(6, geo.size.width * CGFloat(state.percent) / 100))
+                            .animation(.easeInOut(duration: 0.4), value: state.percent)
+                            .animation(.easeInOut(duration: 0.4), value: isFastCharging)
                     }
                 }
                 .frame(height: 7)
             }
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                StatTile(label: "Power", value: String(format: "%.1f W", state.powerWatts))
+                StatTile(label: "Power", value: String(format: "%.1f W", state.powerWatts), highlighted: isFastCharging)
                 StatTile(label: "Voltage", value: String(format: "%.2f V", state.voltage))
                 StatTile(label: "Current", value: String(format: "%.2f A", state.current))
                 StatTile(label: "Health", value: state.healthPercent.map { "\($0)%" } ?? "—")
@@ -234,6 +255,7 @@ struct BatteryPanelView: View {
 struct StatTile: View {
     let label: String
     let value: String
+    var highlighted: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -247,8 +269,13 @@ struct StatTile: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(Color.primary.opacity(0.04))
+        .background(highlighted ? Color.orange.opacity(0.12) : Color.primary.opacity(0.04))
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(highlighted ? Color.orange.opacity(0.35) : Color.clear, lineWidth: 1)
+        )
+        .animation(.easeInOut(duration: 0.3), value: highlighted)
     }
 }
 
